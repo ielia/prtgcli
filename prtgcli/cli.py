@@ -178,17 +178,18 @@ def get_args():
                                              '  ' + __ENV_VARNAME_PASSWORD + '\t\tPRTG user password\n\n' +
                                              '  Note: Environment variables are overriden by command-line arguments.'),
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('command', help='command', choices=['ls', 'status', 'apply'])
-    parser.add_argument('-c', '--content', help='content (default: devices)', default='devices',
-                        choices=['groups', 'devices', 'sensors'])
-    parser.add_argument('-l', '--level', help='Logging level (default: ' + __ARG_DEFAULT_LOGGING_LEVEL + ')',
-                        default=__ARG_DEFAULT_LOGGING_LEVEL)
-    parser.add_argument('-f', '--format', help='Display format (default: pretty)', default='pretty',
-                        choices=['csv', 'pretty'])
-    parser.add_argument('-r', '--rules', help='Rule set filename (default: rules.yaml)', default='rules.yaml')
-    parser.add_argument('-e', '--endpoint', help='PRTG endpoint URL (default: ' + endpoint + ')', default=endpoint)
-    parser.add_argument('-u', '--username', help='PRTG username', default=username)
-    parser.add_argument('-p', '--password', help='PRTG user password', default=password)
+    parser.add_argument('command', choices=['ls', 'status', 'apply'],
+                        help='ls: list, status: status, apply: apply rules')
+    parser.add_argument('-c', '--content', choices=['groups', 'devices', 'sensors'], default='devices',
+                        help='content (default: devices)')
+    parser.add_argument('-l', '--level', default=__ARG_DEFAULT_LOGGING_LEVEL,
+                        help='Logging level (default: ' + __ARG_DEFAULT_LOGGING_LEVEL + ')')
+    parser.add_argument('-f', '--format', choices=['csv', 'pretty'], default='pretty',
+                        help='Display format (default: pretty)')
+    parser.add_argument('-r', '--rules', default='rules.yaml', help='Rule set filename (default: rules.yaml)')
+    parser.add_argument('-e', '--endpoint', default=endpoint, help='PRTG endpoint URL (default: ' + endpoint + ')')
+    parser.add_argument('-u', '--username', default=username, help='PRTG username')
+    parser.add_argument('-p', '--password', default=password, help='PRTG user password')
     return parser.parse_args()
 
 
