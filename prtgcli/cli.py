@@ -13,17 +13,23 @@ from prtg.models import Query, NameMatch
 from prettytable import PrettyTable
 
 
-def load_config():
+__ARG_DEFAULT_LOGGING_LEVEL = 'WARN'
+__ENV_VARNAME_ENDPOINT = 'PRTGENDPOINT'
+__ENV_VARNAME_USERNAME = 'PRTGUSERNAME'
+__ENV_VARNAME_PASSWORD = 'PRTGPASSWORD'
+
+
+def load_environment():
     """
     Load config from environment variables.
-    :var PRTGENDPOINT: Environment variable indicating PRTG endpoint. Default: 'http://172.20.18.112:8080'.
+    :var PRTGENDPOINT: Environment variable indicating PRTG endpoint. Default: 'http://127.0.0.1:8080'.
     :var PRTGUSERNAME: Environment variable indicating PRTG username. Default: 'prtgadmin'.
     :var PRTGPASSWORD: Environment variable indicating PRTG password. Default: 'prtgadmin'.
-    :return:
+    :return: Endpoint, username and password.
     """
-    endpoint = os.getenv('PRTGENDPOINT', 'http://172.20.18.112:8080')
-    username = os.getenv('PRTGUSERNAME', 'prtgadmin')
-    password = os.getenv('PRTGPASSWORD', 'prtgadmin')
+    endpoint = os.getenv(__ENV_VARNAME_ENDPOINT, 'http://127.0.0.1:8080')
+    username = os.getenv(__ENV_VARNAME_USERNAME, 'prtgadmin')
+    password = os.getenv(__ENV_VARNAME_PASSWORD, 'prtgadmin')
     return endpoint, username, password
 
 
@@ -162,12 +168,25 @@ def get_args():
     Get command-line arguments.
     :return: Arguments object.
     """
-    parser = argparse.ArgumentParser(description='PRTG Command Line Interface')
+    endpoint, username, password = load_environment()
+    parser = argparse.ArgumentParser(description='PRTG Command Line Interface',
+                                     epilog=('environment variables:\n' +
+                                             '  ' + __ENV_VARNAME_ENDPOINT + '\t\tPRTG endpoint URL\n' +
+                                             '  ' + __ENV_VARNAME_USERNAME + '\t\tPRTG username\n' +
+                                             '  ' + __ENV_VARNAME_PASSWORD + '\t\tPRTG user password\n\n' +
+                                             '  Note: Environment variables are overriden by command-line arguments.'),
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('command', help='command', choices=['ls', 'status', 'apply'])
-    parser.add_argument('-c', '--content', default='devices', help='content', choices=['groups', 'devices', 'sensors'])
-    parser.add_argument('-l', '--level', help='Logging level', default='INFO')
-    parser.add_argument('-f', '--format', help='Display format', default='pretty', choices=['csv', 'pretty'])
-    parser.add_argument('-r', '--rules', help='Modify objects based on rule set', default='../rules.yaml')
+    parser.add_argument('-c', '--content', help='content (default: devices)', default='devices',
+                        choices=['groups', 'devices', 'sensors'])
+    parser.add_argument('-l', '--level', help='Logging level (default: ' + __ARG_DEFAULT_LOGGING_LEVEL + ')',
+                        default=__ARG_DEFAULT_LOGGING_LEVEL)
+    parser.add_argument('-f', '--format', help='Display format (default: pretty)', default='pretty',
+                        choices=['csv', 'pretty'])
+    parser.add_argument('-r', '--rules', help='Rule set filename (default: rules.yaml)', default='rules.yaml')
+    parser.add_argument('-e', '--endpoint', help='PRTG endpoint URL (default: ' + endpoint + ')', default=endpoint)
+    parser.add_argument('-u', '--username', help='PRTG username', default=username)
+    parser.add_argument('-p', '--password', help='PRTG user password', default=password)
     return parser.parse_args()
 
 
@@ -181,9 +200,7 @@ def main():
 
     logging.basicConfig(level=args.level)
 
-    endpoint, username, password = load_config()
-
-    client = Client(endpoint=endpoint, username=username, password=password)
+    client = Client(endpoint=args.endpoint, username=args.username, password=args.password)
 
     if args.command == 'ls':
         query = Query(client=client, target='table', content=args.content)
