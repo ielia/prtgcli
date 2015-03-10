@@ -133,6 +133,8 @@ def apply_rules(client, rules):
     def update_list_value(the_prop, current_parent_value, value):
         current = device.__getattribute__(the_prop)
         current = list(filter(lambda element: element not in current_parent_value, current))
+        if value is None:
+            value = []
         update = list(filter(lambda element: element not in current and element not in current_parent_value, value))
         the_new_value = ' '.join(current) + ' ' + ' '.join(update)
         return the_new_value

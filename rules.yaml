@@ -1,26 +1,11 @@
 rules:
   -
     attribute: name
-    # pattern: "^adstack.*"
-    pattern: "^dc1."
+    pattern: "^adstack.*"
     prop: tags
     update: True
     value:
-      # - some
-      # - new
-      # - tags
-      # - here
-      - ielia-new-tag
-  -
-    attribute: name
-    pattern: "^.*.olenick.*"
-    prop: tags
-    update: True
-    value:
-      - garompa
-#  -
-#    attribute: name
-#    pattern: "^.*.olenick.*"
-#    prop: tags
-#    update: False
-#    value:
+      - some
+      - new
+      - tags
+      - here

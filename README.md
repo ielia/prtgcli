@@ -51,3 +51,23 @@ Help message:
    ```
    prtgcli --help
    ```
+
+## Rule Set ##
+
+The rule set will be specified in a YAML file with the following format:
+
+    ```
+    rules:
+      -
+        attribute: {MATCHING_ATTRIBUTE_NAME}
+        pattern: {MATCHING_PATTERN}
+        prop: {PROPERTY_NAME}
+        update: {BOOLEAN_UPDATE_VALUE}
+        value:
+          - {TAG1}
+          - ...
+      -
+        ...
+    ```
+
+You can find an example in this same directory, in the file '`rules.yaml`'.
