@@ -4,7 +4,7 @@ This is a command line interface to the [PRTG]("http://www.paessler.com/") API w
 device listing for use with [prtg-py]("https://github.com/ielia/prtg-py").
 
 
-## Installation ##
+## <a name="installation"></a> Installation ##
 
 Preconditions: Python 3.x
 
@@ -27,7 +27,7 @@ Preconditions: All the same for Installation, plus `virtualenv`.
     virtualenv --python=python3.4 venv-prtg-3.4
     ```
     This virtual environment needs to be created with Python 3.x
-2. Continue from the normal [Installation]() instructions.
+2. Continue from the normal [installation instructions](#installation).
 
 
 ## Usage ##
