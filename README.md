@@ -27,7 +27,7 @@ Preconditions: All the same for Installation, plus `virtualenv`.
     virtualenv --python=python3.4 venv-prtg-3.4
     ```
     This virtual environment needs to be created with Python 3.x
-2. Continue from the normal [Installation][] instructions.
+2. Continue from the normal [Installation]() instructions.
 
 
 ## Usage ##
