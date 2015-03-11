@@ -35,7 +35,15 @@ Preconditions: All the same for Installation, plus `virtualenv`.
 
     This virtual environment needs to be created with Python 3.x
 
-2. Continue from the normal [installation instructions](#installation).
+2. Enter the virtual environment:
+
+    ```
+    . *{VIRTUALENV_DIRECTORY}*/bin/activate
+    ```
+
+    You will notice the name of the virtual environment in your prompt, in brackets at the beginning.
+
+3. Continue from the normal [installation instructions](#installation).
 
 
 ## Usage ##
