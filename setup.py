@@ -25,7 +25,7 @@ setup(
         'Programming Language :: Python :: 3.4',
     ],
     entry_points={'console_scripts': ['prtgcli = prtgcli.cli:main']},
-    setup_requires=[
+    install_requires=[
         'PyYAML',
         'prettytable',
         'prtg-py'
