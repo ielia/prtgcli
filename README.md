@@ -1,7 +1,7 @@
 # PRTG Client #
 
-This is a command line interface to the [PRTG](http://www.paessler.com/) API which allows bulk device tagging, sensor
-and device listing for use with [prtg-py](https://github.com/ielia/prtg-py).
+This is a command line interface to the [PRTG](http://www.paessler.com/) API which allows bulk tagging, and listing of
+groups, sensors and devices for use with [prtg-py](https://github.com/ielia/prtg-py).
 
 
 ## <a name="installation"></a> Installation ##

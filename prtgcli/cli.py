@@ -111,19 +111,20 @@ class CliResponse(object):
             return self._csv()
 
 
-def apply_rules(client, rules):
+def apply_rules(client, rules, content_type):
     """
     Apply property change rules.
     :param client: PRTG Client instance.
     :param rules: Rules.
+    :param content_type: Content type, i.e., one of {groups, devices, sensors}.
     """
 
     def get_parent_value(the_prop):
         the_parent_value = []
-        if hasattr(device, 'parentid') and device.parentid:
-            logging.debug('PARENTID: {}'.format(device.parentid))
+        if hasattr(entity, 'parentid') and entity.parentid:
+            logging.debug('PARENTID: {}'.format(entity.parentid))
             try:
-                parent = client.cache.get_object(device.parentid)
+                parent = client.cache.get_object(entity.parentid)
                 the_parent_value = the_parent_value = parent.__getattribute__(the_prop)
             except KeyError:
                 pass
@@ -131,7 +132,7 @@ def apply_rules(client, rules):
         return the_parent_value
 
     def update_list_value(the_prop, current_parent_value, value):
-        current = device.__getattribute__(the_prop)
+        current = entity.__getattribute__(the_prop)
         current = list(filter(lambda element: element not in current_parent_value, current))
         if value is None:
             value = []
@@ -149,17 +150,17 @@ def apply_rules(client, rules):
         return v.strip()
 
     queries = {}
-    for device in client.cache.get_content('devices'):
+    for entity in client.cache.get_content(content_type):
         for rule in rules:
-            if NameMatch(device, **rule).evaluate():
+            if NameMatch(entity, **rule).evaluate():
                 prop = rule['prop']
                 parent_value = get_parent_value(rule['prop'])
                 new_value = get_value(parent_value)
                 query = Query(
-                    client, target='setobjectproperty', objid=device.objid, name=prop, value=new_value
+                    client, target='setobjectproperty', objid=entity.objid, name=prop, value=new_value
                 )
-                device.update_field(prop, new_value, parent_value)
-                queries[(device.objid, prop)] = query
+                entity.update_field(prop, new_value, parent_value)
+                queries[(entity.objid, prop)] = query
 
     for query in queries.values():
         client.query(query)
@@ -215,14 +216,18 @@ def main():
         print(CliResponse(client.query(query), mode=args.format))
 
     if args.command == 'apply':
+        # TODO: Change this so there is a chain of dependencies.
+        # TODO: Change rules so each can specify the content_type to which it applies.
         rules = load_rules(args.rules)
-        # Load groups in cache
         query = Query(client=client, target='table', content='groups')
         client.query(query)
-        # Load devices in cache
-        query = Query(client=client, target='table', content='devices')
-        client.query(query)
-        apply_rules(client, rules)
+        if args.content in ['devices', 'sensors']:
+            query = Query(client=client, target='table', content='devices')
+            client.query(query)
+        if args.content == 'sensors':
+            query = Query(client=client, target='table', content='sensors')
+            client.query(query)
+        apply_rules(client, rules, args.content)
 
 
 if __name__ == '__main__':
