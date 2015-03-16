@@ -1,11 +1,18 @@
 rules:
   -
     attribute: name
-    pattern: "^adstack.*"
+    pattern: "^a"
     prop: tags
     update: True
     value:
-      - some
-      - new
-      - tags
-      - here
+      - 1
+      - 3
+    remove:
+      - 2
+  -
+    attribute: name
+    pattern: "^ab"
+    prop: tags
+    update: True
+    value:
+      - 4

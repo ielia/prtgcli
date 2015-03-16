@@ -9,7 +9,7 @@ import logging
 import yaml
 
 from prtg.client import Client
-from prtg.models import Query, NameMatch
+from prtg.models import LIST_TYPE_PROPS, NameMatch, Query, RuleChain
 from prettytable import PrettyTable
 
 
@@ -111,59 +111,38 @@ class CliResponse(object):
             return self._csv()
 
 
+def _get_parent(client, entity):
+    parent = None
+    if hasattr(entity, 'parentid') and entity.parentid:
+        logging.debug('PARENTID: {}'.format(entity.parentid))
+        try:
+            parent = client.cache.get_object(entity.parentid)
+        except KeyError:
+            pass
+    logging.debug('PARENT: {}'.format(parent))
+    return parent
+
+
 def apply_rules(client, rules, content_type):
     """
     Apply property change rules.
     :param client: PRTG Client instance.
-    :param rules: Rules.
+    :param rules: Rule dictionaries list.
     :param content_type: Content type, i.e., one of {groups, devices, sensors}.
     """
 
-    def get_parent_value(the_prop):
-        the_parent_value = []
-        if hasattr(entity, 'parentid') and entity.parentid:
-            logging.debug('PARENTID: {}'.format(entity.parentid))
-            try:
-                parent = client.cache.get_object(entity.parentid)
-                the_parent_value = the_parent_value = parent.__getattribute__(the_prop)
-            except KeyError:
-                pass
-        logging.debug('PARENT: {}'.format(the_parent_value))
-        return the_parent_value
+    rule_chain = RuleChain(*rules)
 
-    def update_list_value(the_prop, current_parent_value, value):
-        current = entity.__getattribute__(the_prop)
-        current = list(filter(lambda element: element not in current_parent_value, current))
-        if value is None:
-            value = []
-        update = list(filter(lambda element: element not in current and element not in current_parent_value, value))
-        the_new_value = ' '.join(current) + ' ' + ' '.join(update)
-        return the_new_value
-
-    def get_value(current_parent_value):
-        if rule['update']:
-            v = update_list_value(rule['prop'], current_parent_value, rule['value'])
-        elif rule['value'] is not None:
-            v = ' '.join(rule['value'])
-        else:
-            v = ''
-        return v.strip()
-
-    queries = {}
+    change_map = {}
     for entity in client.cache.get_content(content_type):
-        for rule in rules:
-            if NameMatch(entity, **rule).evaluate():
-                prop = rule['prop']
-                parent_value = get_parent_value(rule['prop'])
-                new_value = get_value(parent_value)
-                query = Query(
-                    client, target='setobjectproperty', objid=entity.objid, name=prop, value=new_value
-                )
-                entity.update_field(prop, new_value, parent_value)
-                queries[(entity.objid, prop)] = query
+        change_map[entity.objid] = rule_chain.apply(entity, _get_parent(client, entity))
 
-    for query in queries.values():
-        client.query(query)
+    for objid, changes in change_map.items():
+        for prop, new_value in changes.items():
+            query = Query(
+                client, target='setobjectproperty', objid=objid, name=prop, value=new_value
+            )
+            client.query(query)
 
 
 def get_args():
@@ -201,6 +180,7 @@ def main():
     """
 
     args = get_args()
+    print('ENDPOINT:', args.endpoint)
 
     logging.basicConfig(level=args.level)
 
