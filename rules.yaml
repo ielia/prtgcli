@@ -8,7 +8,7 @@ rules:
       - 1
       - 3
     remove:
-      - 2
+      - xyz
   -
     attribute: name
     pattern: "^ab"

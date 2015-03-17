@@ -73,9 +73,27 @@ The rule set will be specified in a YAML file with the following format:
         update: {BOOLEAN_UPDATE_VALUE}
         value:
           - {TAG1}
+          - {TAG2}
+          - ...
+        remove:
+          - {TAGX}
+          - {TAGY}
           - ...
       -
         ...
     ```
 
 You can find an example in this same directory, in the file '`rules.yaml`'.
+
+The rules are ran sequentially, in the order they are specified in the YAML file.
+
+### Structure ###
+
+* **`attribute`**: PRTG entity (group/device/sensor) attribute to which the `pattern` will apply. E.g.: `name`.
+* **`pattern`**: Regular expression (will be compiled by Python's `re` package) with which to match the `attribute`.
+* **`prop`**: Property (attribute) of the PRTG entity to be changed. E.g.: `tags`.
+* **`update`**: Boolean flag (either `True` or `False`, with that casing) that specifies whether the value will be added
+                to the current one (current also in terms of rule application) and the `remove` section will be applied
+                or that the `value` will overwrite the current one.
+* **`value`**: List of values of update/replacement. See `update` above.
+* **`remove`**: List of values that will be removed from the original. Will only be applied when `update` is `True`.
