@@ -9,7 +9,7 @@ import logging
 import yaml
 
 from prtg.client import Client
-from prtg.models import LIST_TYPE_PROPS, NameMatch, Query, RuleChain
+from prtg.models import Query, RuleChain
 from prettytable import PrettyTable
 
 
@@ -47,25 +47,27 @@ class CliResponse(object):
     PRTG client response object. To be used once per command.
     """
 
-    def __init__(self, response, mode='pretty', sort_by=None):
+    def __init__(self, entities, mode='pretty', sort_by=None):
         """
-        :param response: Response object (as in the response coming out of the Client instance).
+        :param entities: Entities coming from cache.
         :param mode: Print (data presentation) mode: 'csv' or 'pretty'.
         :param sort_by: Sorting column name (e.g.: 'objid').
         """
         self.mode = mode
         self.sort_by = sort_by
-        self.response = response
+        self.response = []
 
         columns = set()
 
-        for item in self.response:
-            for key, value in item.__dict__.items():
+        for entity in entities:
+            item = {}
+            self.response.append(item)
+            for key, value in entity.__dict__.items():
                 columns.add(key)
                 if isinstance(value, list):
-                    item.__setattr__(key, ' '.join(value))
-                if isinstance(value, int):
-                    item.__setattr__(key, str(value))
+                    item[key] = ' '.join(value)
+                else:
+                    item[key] = str(value)
 
         self.columns = list(columns)
         # TODO: Better filtering
@@ -82,7 +84,7 @@ class CliResponse(object):
 
         for resp in self.response:
             try:
-                _lst.append(','.join([resp.__getattribute__(x) for x in self.columns]))
+                _lst.append(','.join([resp.get(x, '') for x in self.columns]))
             except AttributeError or TypeError:
                 pass
         _lst.sort()
@@ -98,7 +100,7 @@ class CliResponse(object):
 
         for resp in self.response:
             try:
-                p.add_row([resp.__getattribute__(x) for x in self.columns])
+                p.add_row([resp.get(x, '') for x in self.columns])
             except AttributeError or TypeError:
                 pass
 
@@ -123,6 +125,42 @@ def _get_parent(client, entity):
     return parent
 
 
+def cache_necessary_content(client, content_type):
+    """
+    Make the appropriate queries to cache all the necessary content to preview/apply rules.
+    :param client: PRTG Client instance.
+    :param content_type: Content type, i.e., one of {groups, devices, sensors}.
+    """
+    query = Query(client=client, target='table', content='groups')
+    client.query(query)
+    if content_type in ['devices', 'sensors']:
+        query = Query(client=client, target='table', content='devices')
+        client.query(query)
+    if content_type == 'sensors':
+        query = Query(client=client, target='table', content='sensors')
+        client.query(query)
+
+
+def run_rules(client, rules, content_type):
+    """
+    Runs the rules against the local cache.
+    :param client: PRTG Client instance.
+    :param rules: Rule dictionaries list.
+    :param content_type: Content type, i.e., one of {groups, devices, sensors}.
+    :yield: The list of changes (URLs with full authentication credentials).
+    """
+    rule_chain = RuleChain(*rules)
+
+    change_map = {}
+    for entity in client.cache.get_content(content_type):
+        change_map[entity.objid] = rule_chain.apply(entity, _get_parent(client, entity))
+        client.cache.write_content([entity], True)
+
+    for objid, changes in change_map.items():
+        for prop, new_value in changes.items():
+            yield Query(client, target='setobjectproperty', objid=objid, name=prop, value=new_value)
+
+
 def apply_rules(client, rules, content_type):
     """
     Apply property change rules.
@@ -130,19 +168,8 @@ def apply_rules(client, rules, content_type):
     :param rules: Rule dictionaries list.
     :param content_type: Content type, i.e., one of {groups, devices, sensors}.
     """
-
-    rule_chain = RuleChain(*rules)
-
-    change_map = {}
-    for entity in client.cache.get_content(content_type):
-        change_map[entity.objid] = rule_chain.apply(entity, _get_parent(client, entity))
-
-    for objid, changes in change_map.items():
-        for prop, new_value in changes.items():
-            query = Query(
-                client, target='setobjectproperty', objid=objid, name=prop, value=new_value
-            )
-            client.query(query)
+    for query in run_rules(client, rules, content_type):
+        client.query(query)
 
 
 def get_args():
@@ -158,8 +185,8 @@ def get_args():
                                              '  ' + __ENV_VARNAME_PASSWORD + '\t\tPRTG user password\n\n' +
                                              '  Note: Environment variables are overriden by command-line arguments.'),
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('command', choices=['ls', 'status', 'apply'],
-                        help='ls: list, status: status, apply: apply rules')
+    parser.add_argument('command', choices=['ls', 'status', 'preview', 'apply'],
+                        help='ls: list, status: status, preview: preview rule application, apply: apply rules')
     parser.add_argument('-c', '--content', choices=['groups', 'devices', 'sensors'], default='devices',
                         help='content (default: devices)')
     parser.add_argument('-l', '--level', default=__ARG_DEFAULT_LOGGING_LEVEL,
@@ -188,25 +215,28 @@ def main():
 
     if args.command == 'ls':
         query = Query(client=client, target='table', content=args.content)
-        print(CliResponse(client.query(query), mode=args.format))
+        client.query(query)
+        print(CliResponse(client.cache.get_content(args.content), mode=args.format))
 
-    if args.command == 'status':  # TODO: Fix.
+    if args.command == 'status':  # FIXME
         query = Query(client=client, target='getstatus')
         client.query(query)
         print(CliResponse(client.query(query), mode=args.format))
+
+    if args.command == 'preview':
+        # TODO: Change this so there is a chain of dependencies.
+        # TODO: Change rules so each can specify the content_type to which it applies.
+        rules = load_rules(args.rules)
+        cache_necessary_content(client, args.content)
+        for query in run_rules(client, rules, args.content):  # Force full execution
+            pass  # TODO: See if this is necessary
+        print(CliResponse(client.cache.get_content(args.content), mode=args.format))
 
     if args.command == 'apply':
         # TODO: Change this so there is a chain of dependencies.
         # TODO: Change rules so each can specify the content_type to which it applies.
         rules = load_rules(args.rules)
-        query = Query(client=client, target='table', content='groups')
-        client.query(query)
-        if args.content in ['devices', 'sensors']:
-            query = Query(client=client, target='table', content='devices')
-            client.query(query)
-        if args.content == 'sensors':
-            query = Query(client=client, target='table', content='sensors')
-            client.query(query)
+        cache_necessary_content(client, args.content)
         apply_rules(client, rules, args.content)
 
 
