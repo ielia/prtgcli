@@ -26,6 +26,7 @@ setup(
     ],
     entry_points={'console_scripts': ['prtgcli = prtgcli.cli:main']},
     install_requires=[
+        'csvkit',
         'PyYAML',
         'prettytable',
         'prtg-py'

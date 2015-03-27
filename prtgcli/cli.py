@@ -4,12 +4,14 @@ CLI Tool for Paessler's PRTG (http://www.paessler.com/)
 """
 
 import argparse
-import os
+import csvkit
 import logging
+import os
+import sys
 import yaml
 
-from prtg.client import Client
-from prtg.models import Query, RuleChain
+from prtg.client import Client, PrtgEncoder
+from prtg.models import CONTENT_TYPE_ALL, CONTENT_TYPES, Query, RuleChain
 from prettytable import PrettyTable
 
 
@@ -17,7 +19,7 @@ __ARG_DEFAULT_LOGGING_LEVEL = 'WARN'
 __ENV_VARNAME_ENDPOINT = 'PRTGENDPOINT'
 __ENV_VARNAME_USERNAME = 'PRTGUSERNAME'
 __ENV_VARNAME_PASSWORD = 'PRTGPASSWORD'
-
+__MAX_BUFFER_SIZE = 500
 
 def load_environment():
     """
@@ -39,6 +41,8 @@ def load_rules(rule_path):
     :param rule_path: Rules YAML fully-qualified filename.
     :return: Rules object resulting from YAML parsing.
     """
+    # TODO: Change this so there is a chain of dependencies.
+    # TODO: Change rules so each can specify the content_type to which it applies.
     return yaml.load(open(rule_path).read())['rules']
 
 
@@ -63,15 +67,14 @@ class CliResponse(object):
             item = {}
             self.response.append(item)
             for key, value in entity.__dict__.items():
-                columns.add(key)
-                if isinstance(value, list):
-                    item[key] = ' '.join(value)
-                else:
-                    item[key] = str(value)
+                if key not in ['active', 'changed']:
+                    columns.add(key)
+                    if isinstance(value, list):
+                        item[key] = ' '.join(value)
+                    else:
+                        item[key] = str(value)
 
         self.columns = list(columns)
-        # TODO: Better filtering
-        self.columns = [x for x in self.columns if not any([x == 'active', x == 'type'])]
         self.columns.sort()
 
     def _csv(self):
@@ -125,51 +128,94 @@ def _get_parent(client, entity):
     return parent
 
 
-def cache_necessary_content(client, content_type):
+def cache_content(client, source_filename):
+    buffer = []
+    for entity in csvkit.DictReader(open(source_filename)):
+        buffer.append(PrtgEncoder.encode_dict(entity, entity['type'].lower() + 's'))
+        if len(buffer) >= __MAX_BUFFER_SIZE:
+            client.cache.write_content(buffer, True)
+            buffer.clear()
+    if buffer:
+        client.cache.write_content(buffer, True)
+
+
+def fetch_and_cache_necessary_content(client, source_filename, content_type):
     """
     Make the appropriate queries to cache all the necessary content to preview/apply rules.
     :param client: PRTG Client instance.
+    :param source_filename: Source CSV filename to use instead of PRTG queries.
     :param content_type: Content type, i.e., one of {groups, devices, sensors}.
     """
-    query = Query(client=client, target='table', content='groups')
-    client.query(query)
-    if content_type in ['devices', 'sensors']:
-        query = Query(client=client, target='table', content='devices')
-        client.query(query)
-    if content_type == 'sensors':
-        query = Query(client=client, target='table', content='sensors')
-        client.query(query)
+    if source_filename:
+        cache_content(client, source_filename)
+    elif content_type == CONTENT_TYPE_ALL:
+        fetch_and_cache_specific_content(client, content_type)
+    else:
+        fetch_and_cache_specific_content(client, CONTENT_TYPES[:CONTENT_TYPES.index(content_type)+1])
 
 
-def run_rules(client, rules, content_type):
+def fetch_and_cache_specific_content(client, content_type, *args):
+    if content_type == CONTENT_TYPE_ALL:
+        fetch_and_cache_specific_content(client, *CONTENT_TYPES)
+    else:
+        query = Query(client=client, target='table', content=content_type)
+        client.query(query)
+        for content_type in args:
+            query = Query(client=client, target='table', content=content_type)
+            client.query(query)
+
+
+def run_rules(client, rules, content_type, show=False):
     """
     Runs the rules against the local cache.
     :param client: PRTG Client instance.
     :param rules: Rule dictionaries list.
     :param content_type: Content type, i.e., one of {groups, devices, sensors}.
+    :param show: Boolean flag indicating whether to print the queries or not.
     :yield: The list of changes (URLs with full authentication credentials).
     """
     rule_chain = RuleChain(*rules)
 
     change_map = {}
     for entity in client.cache.get_content(content_type):
-        change_map[entity.objid] = rule_chain.apply(entity, _get_parent(client, entity))
-        client.cache.write_content([entity], True)
+        changes_to_entity = rule_chain.apply(entity, _get_parent(client, entity))
+        if changes_to_entity:
+            change_map[entity.objid] = changes_to_entity
+            client.cache.write_content([entity], True)
 
     for objid, changes in change_map.items():
         for prop, new_value in changes.items():
-            yield Query(client, target='setobjectproperty', objid=objid, name=prop, value=new_value)
+            query = Query(client, target='setobjectproperty', objid=objid, name=prop, value=new_value)
+            if show:
+                print(query)
+            yield query
 
 
-def apply_rules(client, rules, content_type):
+def apply_rules(client, rules, content_type, show=False):
     """
     Apply property change rules.
     :param client: PRTG Client instance.
     :param rules: Rule dictionaries list.
     :param content_type: Content type, i.e., one of {groups, devices, sensors}.
+    :param show: Boolean flag indicating whether to print the queries or not.
     """
-    for query in run_rules(client, rules, content_type):
+    for query in run_rules(client, rules, content_type, show):
         client.query(query)
+
+
+def run_through_rules(client, rules, content_type, show=False):
+    """
+    Runs the rules against the local cache. The difference between this method and 'run_rules' is that this one consumes
+    the latter in order to force execution.
+    :param client: PRTG Client instance.
+    :param rules: Rule dictionaries list.
+    :param content_type: Content type, i.e., one of {groups, devices, sensors}.
+    :param show: Boolean flag indicating whether to print the queries or not.
+    """
+    for query in run_rules(client, rules, content_type, show):  # Forcing execution
+        pass
+    if show:
+        print()
 
 
 def get_args():
@@ -185,18 +231,23 @@ def get_args():
                                              '  ' + __ENV_VARNAME_PASSWORD + '\t\tPRTG user password\n\n' +
                                              '  Note: Environment variables are overriden by command-line arguments.'),
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('command', choices=['ls', 'status', 'preview', 'apply'],
-                        help='ls: list, status: status, preview: preview rule application, apply: apply rules')
-    parser.add_argument('-c', '--content', choices=['groups', 'devices', 'sensors'], default='devices',
-                        help='content (default: devices)')
+    parser.add_argument('command', choices=['ls', 'status', 'preview', 'preview-changed-only', 'apply'],
+                        help='ls: list, status: status, preview: preview rule application, apply: apply rules.')
+    parser.add_argument('-c', '--content', choices=['groups', 'devices', 'sensors', 'all'], default='devices',
+                        help='content (default: devices).')
     parser.add_argument('-l', '--level', default=__ARG_DEFAULT_LOGGING_LEVEL,
-                        help='Logging level (default: ' + __ARG_DEFAULT_LOGGING_LEVEL + ')')
+                        help='Logging level (default: ' + __ARG_DEFAULT_LOGGING_LEVEL + ').')
     parser.add_argument('-f', '--format', choices=['csv', 'pretty'], default='pretty',
-                        help='Display format (default: pretty)')
+                        help='Display format (default: pretty).')
     parser.add_argument('-r', '--rules', default='rules.yaml', help='Rule set filename (default: rules.yaml)')
-    parser.add_argument('-e', '--endpoint', default=endpoint, help='PRTG endpoint URL (default: ' + endpoint + ')')
-    parser.add_argument('-u', '--username', default=username, help='PRTG username')
-    parser.add_argument('-p', '--password', default=password, help='PRTG user password')
+    parser.add_argument('-s', '--source-file', default=None,
+                        help="Uses a source CSV file instead of querying PRTG. "
+                             "This option doesn't allow applying rules, but just previewing them.")
+    parser.add_argument('-e', '--endpoint', default=endpoint, help='PRTG endpoint URL (default: ' + endpoint + ').')
+    parser.add_argument('-u', '--username', default=username, help='PRTG username.')
+    parser.add_argument('-p', '--password', default=password, help='PRTG user password.')
+    parser.add_argument('-q', '--show-queries', action='store_true',
+                        help='Shows the query URLs when previewing or applying rules.')
     return parser.parse_args()
 
 
@@ -207,15 +258,20 @@ def main():
     """
 
     args = get_args()
-    print('ENDPOINT:', args.endpoint)
+    if args.source_file is not None:
+        print('SOURCE FILE:', args.source_file)
+    else:
+        print('ENDPOINT:', args.endpoint)
 
     logging.basicConfig(level=args.level)
 
     client = Client(endpoint=args.endpoint, username=args.username, password=args.password)
 
     if args.command == 'ls':
-        query = Query(client=client, target='table', content=args.content)
-        client.query(query)
+        if args.source_file:
+            cache_content(client, args.source_file)
+        else:
+            fetch_and_cache_specific_content(client, args.content)
         print(CliResponse(client.cache.get_content(args.content), mode=args.format))
 
     if args.command == 'status':  # FIXME
@@ -224,20 +280,26 @@ def main():
         print(CliResponse(client.query(query), mode=args.format))
 
     if args.command == 'preview':
-        # TODO: Change this so there is a chain of dependencies.
-        # TODO: Change rules so each can specify the content_type to which it applies.
         rules = load_rules(args.rules)
-        cache_necessary_content(client, args.content)
-        for query in run_rules(client, rules, args.content):  # Force full execution
-            pass  # TODO: See if this is necessary
+        fetch_and_cache_necessary_content(client, args.source_file, args.content)
+        print()
+        run_through_rules(client, rules, args.content, args.show_queries)
         print(CliResponse(client.cache.get_content(args.content), mode=args.format))
 
-    if args.command == 'apply':
-        # TODO: Change this so there is a chain of dependencies.
-        # TODO: Change rules so each can specify the content_type to which it applies.
+    if args.command == 'preview-changed-only':
         rules = load_rules(args.rules)
-        cache_necessary_content(client, args.content)
-        apply_rules(client, rules, args.content)
+        fetch_and_cache_necessary_content(client, args.source_file, args.content)
+        print()
+        run_through_rules(client, rules, args.content, args.show_queries)
+        print(CliResponse(client.cache.get_changed_content(args.content), mode=args.format))
+
+    if args.command == 'apply':
+        if args.source_file:
+            print('Cannot apply rules when a source file is specified.', file=sys.stderr)
+        else:
+            rules = load_rules(args.rules)
+            fetch_and_cache_necessary_content(client, args.source_file, args.content)
+            apply_rules(client, rules, args.content, args.show_queries)
 
 
 if __name__ == '__main__':
