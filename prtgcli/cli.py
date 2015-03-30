@@ -151,7 +151,7 @@ def fetch_and_cache_necessary_content(client, source_filename, content_type):
     elif content_type == CONTENT_TYPE_ALL:
         fetch_and_cache_specific_content(client, content_type)
     else:
-        fetch_and_cache_specific_content(client, CONTENT_TYPES[:CONTENT_TYPES.index(content_type)+1])
+        fetch_and_cache_specific_content(client, *CONTENT_TYPES[:CONTENT_TYPES.index(content_type)+1])
 
 
 def fetch_and_cache_specific_content(client, content_type, *args):
