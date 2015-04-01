@@ -11,7 +11,8 @@ import sys
 import yaml
 
 from prtg.client import Client, PrtgEncoder
-from prtg.models import CONTENT_TYPE_ALL, CONTENT_TYPES, Query, RuleChain
+from prtg.models import CONTENT_TYPE_ALL, CONTENT_TYPES, Query
+from prtg.rules import RuleChain
 from prettytable import PrettyTable
 
 
