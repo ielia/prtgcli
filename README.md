@@ -90,8 +90,10 @@ The rules are run sequentially, in the order they are specified in the YAML file
                 to the current one (current also in terms of rule application) and the `remove` section will be applied
                 or that the `value` will overwrite the current one.
 * **`formatting`**: A string that will be passed to Python's `string.format` function to overwrite the property value
-                     with the corresponding expression (E.g.: `formatting: "x{entity.name}x"` and a `name: "NAME"` will
-                     result in `name = "xNAMEx"`).
+                    with the corresponding expression (E.g.: `formatting: "x{entity.name}x"` and a `name: "NAME"` will
+                    result in `name = "xNAMEx"`).
+* **`rollback_formatting`**: This property rollbacks a previous formatting. It receives the same string as the previous
+                             property and attempts to roll the change back.
 * **`value`**: List of values of update/replacement. See `update` above.
 * **`remove`**: List of values that will be removed from the original. Will only be applied when `update` is `True`.
 
@@ -262,4 +264,71 @@ The rules are run sequentially, in the order they are specified in the YAML file
         sensors = [
             { id: 4567, name: 'a sensor', parentid: 123 }
             { id: 4568, name: 'some other device - [PING]', parentid: 124 }
+        ]
+
+#### Example 3 ####
+
+##### PRTG Contents #####
+
+    group = { id: 1, name: 'the group' }
+    devices = [
+        { id: 123, name: 'some device', parentid: 1 }
+    ]
+    sensors = [
+        { id: 4567, name: 'some device - [PING]', parentid: 123 }
+    ]
+
+##### File: sensor-rollback.yaml #####
+
+    rules:
+      -
+        attribute: name
+        pattern: "^\\[.*\\]"
+        prop: name
+        update: False
+        rollback_formatting: "{parent.name} - {entity.name}"
+      -
+        attribute: name
+        pattern: "^\\[.*\\]"
+        prop: name
+        update: False
+        rollback_formatting: "[{entity.name}]"
+
+##### Command line #####
+
+    prtgcli apply -r sensor-rollback.yaml -c sensors
+
+##### Resulting sensors #####
+
+    sensors = [
+        { id: 4567, name: 'PING', parentid: 123 }
+    ]
+
+##### Explanation #####
+
+1. The first rule will match the only sensor (`4567`).
+
+    a. That sensor's name will be recovered from `{parent.name} - (.*)` (which is the same expression from
+       `rollback_formatting`, escaped and replacing `{entity.name}`&mdash;`name` because it is the specified
+       `prop`&mdash;for a group extraction reg.exp.). That regular expression will be populated with the sensor's
+       parent's name, becoming `some device - (.*)`. This will result in the extraction of `[PING]`, thus setting its
+       `name` to the extracted string.
+
+    *At this point, we have the following:*
+
+        sensors = [
+            { id: 4567, name: '[PING]', parentid: 123 }
+        ]
+
+2. The second rule will, again, match the only sensor (`4567`).
+
+    a. That sensor's name will be recovered from `\[(.*)\]` (which is the same expression from `rollback_formatting`,
+       escaped and replacing `{entity.name}`&mdash;`name` because it is the specified `prop`&mdash;for a group
+       extraction reg.exp.). This will result in the extraction of `PING`, thus setting its `name` to the extracted
+       string.
+
+    *At this point, we have the following:*
+
+        sensors = [
+            { id: 4567, name: 'PING', parentid: 123 }
         ]
