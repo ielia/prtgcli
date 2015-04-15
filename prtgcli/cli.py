@@ -4,6 +4,7 @@ CLI Tool for Paessler's PRTG (http://www.paessler.com/)
 """
 
 import argparse
+from urllib.error import HTTPError
 import csvkit
 import logging
 import os
@@ -21,6 +22,8 @@ __ENV_VARNAME_ENDPOINT = 'PRTGENDPOINT'
 __ENV_VARNAME_USERNAME = 'PRTGUSERNAME'
 __ENV_VARNAME_PASSWORD = 'PRTGPASSWORD'
 __MAX_BUFFER_SIZE = 500
+__ON_QUERY_HTTP_ERROR_ABORT = False
+
 
 def load_environment():
     """
@@ -201,7 +204,13 @@ def apply_rules(client, rules, content_type, show=False):
     :param show: Boolean flag indicating whether to print the queries or not.
     """
     for query in run_rules(client, rules, content_type, show):
-        client.query(query)
+        try:
+            client.query(query)
+        except HTTPError:
+            logging.error('Failed applying rules to objid {} prop "{}"'.format(query.extra['id'], query.extra['name']))
+            if __ON_QUERY_HTTP_ERROR_ABORT:
+                logging.fatal('ABORTED RUN')
+                raise
 
 
 def run_through_rules(client, rules, content_type, show=False):
