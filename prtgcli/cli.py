@@ -182,10 +182,12 @@ def run_rules(client, rules, content_type, show=False):
 
     change_map = {}
     for entity in client.cache.get_content(content_type):
+        logging.debug('Entity to be processed: {}'.format(entity))
         changes_to_entity = rule_chain.apply(entity, _get_parent(client, entity))
         if changes_to_entity:
             change_map[entity.objid] = changes_to_entity
             client.cache.write_content([entity], True)
+        logging.debug('Effective changes: {}'.format(changes_to_entity))
 
     for objid, changes in change_map.items():
         for prop, new_value in changes.items():
@@ -247,6 +249,7 @@ def get_args():
                         help='content (default: devices).')
     parser.add_argument('-l', '--level', default=__ARG_DEFAULT_LOGGING_LEVEL,
                         help='Logging level (default: ' + __ARG_DEFAULT_LOGGING_LEVEL + ').')
+    parser.add_argument('-L', '--log-file', default=None, help='Log file (if not set, log will be written to console).')
     parser.add_argument('-f', '--format', choices=['csv', 'pretty'], default='pretty',
                         help='Display format (default: pretty).')
     parser.add_argument('-r', '--rules', default='rules.yaml', help='Rule set filename (default: rules.yaml)')
@@ -261,6 +264,14 @@ def get_args():
     return parser.parse_args()
 
 
+def configure_logging(level, log_file=None):
+    log_format = '%(asctime)s %(levelname)s:%(name)s: %(message)s'
+    if log_file:
+        logging.basicConfig(filename=log_file, level=logging.DEBUG, format=log_format)
+    else:
+        logging.basicConfig(level=level, format=log_format)
+
+
 def main():
     """
     Parse commandline arguments for PRTG-CLI.
@@ -268,12 +279,15 @@ def main():
     """
 
     args = get_args()
+
+    configure_logging(args.level, args.log_file)
+
+    logging.info('----- PRTG-CLI STARTED -----')
+
     if args.source_file is not None:
         print('SOURCE FILE:', args.source_file)
     else:
         print('ENDPOINT:', args.endpoint)
-
-    logging.basicConfig(level=args.level)
 
     client = Client(endpoint=args.endpoint, username=args.username, password=args.password)
 
@@ -310,6 +324,8 @@ def main():
             rules = load_rules(args.rules)
             fetch_and_cache_necessary_content(client, args.source_file, args.content)
             apply_rules(client, rules, args.content, args.show_queries)
+
+    logging.info('----- PRTG-CLI FINISHED -----')
 
 
 if __name__ == '__main__':
