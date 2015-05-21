@@ -251,6 +251,8 @@ def get_args():
     parser.add_argument('-l', '--level', default=__ARG_DEFAULT_LOGGING_LEVEL,
                         help='Logging level (default: ' + __ARG_DEFAULT_LOGGING_LEVEL + ').')
     parser.add_argument('-L', '--log-file', default=None, help='Log file (if not set, log will be written to console).')
+    parser.add_argument('-d', '--cache-dir', default=None,
+                        help="Directory where cache file is written (default: System's).")
     parser.add_argument('-f', '--format', choices=['csv', 'pretty'], default='pretty',
                         help='Display format (default: pretty).')
     parser.add_argument('-r', '--rules', default='rules.yaml', help='Rule set filename (default: rules.yaml)')
@@ -290,7 +292,7 @@ def main():
     else:
         print('ENDPOINT:', args.endpoint)
 
-    client = Client(endpoint=args.endpoint, username=args.username, password=args.password)
+    client = Client(endpoint=args.endpoint, username=args.username, password=args.password, cache_dir=args.cache_dir)
 
     if args.command == 'ls':
         if args.source_file:
