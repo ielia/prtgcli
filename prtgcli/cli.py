@@ -181,8 +181,9 @@ def run_rules(client, rules, content_type, show=False):
     rule_chain = RuleChain(*rules)
 
     change_map = {}
+    count = 0
     for entity in client.cache.get_content(content_type):
-        logging.debug('Entity to be processed: {}'.format(entity))
+        logging.debug('Entity to be processed (count={}): {}'.format(count, entity))
         changes_to_entity = rule_chain.apply(entity, _get_parent(client, entity))
         if changes_to_entity:
             change_map[entity.objid] = changes_to_entity
@@ -267,7 +268,7 @@ def get_args():
 def configure_logging(level, log_file=None):
     log_format = '%(asctime)s %(levelname)s:%(name)s: %(message)s'
     if log_file:
-        logging.basicConfig(filename=log_file, level=logging.DEBUG, format=log_format)
+        logging.basicConfig(filename=log_file, level=level, format=log_format)
     else:
         logging.basicConfig(level=level, format=log_format)
 
