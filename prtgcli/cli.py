@@ -126,8 +126,8 @@ def _get_parent(client, entity):
         logging.debug('PARENTID: {}'.format(entity.parentid))
         try:
             parent = client.cache.get_object(entity.parentid)
-        except KeyError:
-            pass
+        except (KeyError, EOFError) as error:
+            logging.debug('Got an error {} looking for: {}.'.format(type(error), entity.parentid))
     logging.debug('PARENT: {}'.format(parent))
     return parent
 
